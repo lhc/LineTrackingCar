@@ -8,6 +8,8 @@
 //==============================================================================
 
 #include "setup_hw.h"
+#include "setup_database.h"
+
 #include "Task/commands.h"
 #include "Task/digital.h"
 #include "Task/control.h"
@@ -82,9 +84,14 @@ void Setup_Init( void )
   }
 
   CLI_RegisterCommands();
+
+//  vTaskDelay(2000);
+
 #endif
 
-  result = xTaskCreate( Digital_Task, "analog", (configMINIMAL_STACK_SIZE * 5), NULL, ANALOG_PRIORITY, NULL );
+  Setup_Database_Init();
+
+  result = xTaskCreate( Digital_Task, "digital", (configMINIMAL_STACK_SIZE * 5), NULL, ANALOG_PRIORITY, NULL );
   if( !result )
   {
     Setup_Error();

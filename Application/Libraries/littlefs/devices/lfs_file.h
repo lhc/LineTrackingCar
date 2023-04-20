@@ -1,13 +1,14 @@
 /**
- * @file    setup_hw.h
- * @brief
- */
+* @file    lfs_file.h
+* @brief
+*/
 
 //==============================================================================
 // Define to prevent recursive inclusion
 //==============================================================================
-#ifndef _SETUP_HW_
-#define	_SETUP_HW_
+
+#ifndef _LFS_FILE_H
+#define _LFS_FILE_H
 
 /* C++ detection */
 #ifdef __cplusplus
@@ -17,37 +18,14 @@ extern "C" {
 //==============================================================================
 // Includes
 //==============================================================================
-
-#include "main.h"
-#include "stm32f411xe.h"
-#include "stm32f4xx_hal.h"
-
-#include "cmsis_os.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
-#include "stream_buffer.h"
-
-#include <stdint.h>
-#include <stdbool.h>
+#include "../lfs.h"
 
 //==============================================================================
 //Exported constants
 //==============================================================================
 
-/* Littlefs Debug */
-#define LFS_NO_DEBUG            /**< Disable messages */
-#define LFS_NO_WARN             /**< Disable warn messages */
-#define LFS_NO_ERROR            /**< Disable error messages */
-#define LFS_NO_ASSERT           /**< Disable asserts of lib */
-//#define LFS_NO_MALLOC         /**< No use malloc and free function */
-//#define LFS_YES_TRACE         /**< Enable messages of trace */
-//#define LFS_NO_INTRINSICS     /**< ?? */
-//#define LFS_READONLY          /**< Configuring library just to use read mode */
-//#define LFS_THREADSAFE        /**< Enable functions to lock and unlock when entry in some routine of read and write */
-
-#define SETUP_FIRMWARE_VERSION   "v1.0"
+#define LFS_FILE_SIZE_BUFFER      (64)
+#define LFS_MAX_FILENAME_SIZE     (25)
 
 //==============================================================================
 // Exported macro
@@ -57,6 +35,31 @@ extern "C" {
 // Exported types
 //==============================================================================
 
+typedef struct
+{
+  uint8_t Read[ LFS_FILE_SIZE_BUFFER ];
+  uint8_t Prog[ LFS_FILE_SIZE_BUFFER ];
+  uint8_t Lookahead[ LFS_FILE_SIZE_BUFFER ];
+  uint8_t StaticBuffer[ LFS_FILE_SIZE_BUFFER ];
+} LfsBuffers_t;
+
+typedef struct
+{
+  lfs_t Lfs;
+  lfs_file_t File;
+  lfs_dir_t Dir;
+  struct lfs_info Info;
+  struct lfs_config Cfg;
+  bool IsMounted;
+  SemaphoreHandle_t MutexFatfs;
+} LfsFilepHandlerl_t;
+
+typedef struct
+{
+  LfsFilepHandlerl_t FlSystem;
+  LfsBuffers_t buffers;
+} LfsHandler_t;
+
 //==============================================================================
 // Exported variables
 //==============================================================================
@@ -65,15 +68,12 @@ extern "C" {
 // Exported functions prototypes
 //==============================================================================
 
-void Setup_Init( void );
-
 //==============================================================================
 // Exported functions
 //==============================================================================
 
-/* C++ detection */
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _SETUP_HW_ */
+#endif /* _LFS_FILE_H */

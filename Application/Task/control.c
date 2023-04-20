@@ -1,5 +1,5 @@
 /**
- * @file    printer.cpp
+ * @file    control.c
  * @brief
  */
 
@@ -11,7 +11,10 @@
 #include "digital.h"
 #include "serial.h"
 #include "Setup/setup_hw.h"
+#include "Setup/setup_database.h"
 #include "bitwise/bitwise.h"
+#include "led/led.h"
+#include "button/button.h"
 
 //==============================================================================
 // Private definitions
@@ -32,14 +35,14 @@ typedef enum
   eMOTOR_BACKWARD,
 } MotorDirection_e;
 
-typedef enum
+const char *ControlDirMsg[] =
 {
-  eSTOP = 0,
-  eFRONT,
-  eBACK,
-  eRIGHT,
-  eLETH,
-} CarDirection_e;
+    "Stop",
+    "Front",
+    "Back",
+    "Right",
+    "Left"
+};
 
 typedef struct
 {
@@ -66,6 +69,7 @@ typedef struct
   CarDirection_e Dir;
   uint8_t DutyCyclePercentA; /* range 0 to 100%  */
   uint8_t DutyCyclePercentB; /* range 0 to 100%  */
+  PidCtrl_t Pid;
 } CarCtrl_t;
 
 //==============================================================================
@@ -87,12 +91,16 @@ static void Control_Car_SetDir( MotorCtrl_t *MotorCtrl, CarCtrl_t *CarCtrl );
 static void Control_Car_CalcDirection( CarCtrl_t *Car, DigitalValues_t *Digital );
 static void Control_Trace( CarCtrl_t *Car, DigitalValues_t *Digital );
 
+static void Control_ButtonEvent_CB( bool IsPressed );
+
 //==============================================================================
 // Private variables
 //==============================================================================
 
-static bool gIsLogEnable = false;
-static PidCtrl_t gPidCtrl = {0};
+static const char PidFileConfig[] = "/pid.conf";
+static bool gIsTraceEnable = false;
+static CarCtrl_t gCarCtrl = {0};
+static Led_t gLed1 = {0};
 
 //==============================================================================
 // Private functions
@@ -142,7 +150,7 @@ static void Control_Test_Raw(void)
 // Funcao usada para a direcao dos motores
 static void Control_Test_Direction(void)
 {
-  CarCtrl_t carCtrl;
+  CarCtrl_t gCarCtrl;
   MotorCtrl_t MotorCtrl;
 
   DigitalValues_t adcValues;
@@ -150,25 +158,25 @@ static void Control_Test_Direction(void)
   // Configura GPIO e PWM dos motores
   Control_Init( &MotorCtrl );
 
-  carCtrl.DutyCyclePercentA = 50;
-  carCtrl.DutyCyclePercentB = 50;
+  gCarCtrl.DutyCyclePercentA = 50;
+  gCarCtrl.DutyCyclePercentB = 50;
 
   for(;;)
   {
-    carCtrl.Dir = eFRONT;
-    Control_Car_SetDir( &MotorCtrl, &carCtrl );
+    gCarCtrl.Dir = eCAR_DIR_FRONT;
+    Control_Car_SetDir( &MotorCtrl, &gCarCtrl );
     vTaskDelay(1000);
 
-    carCtrl.Dir = eBACK;
-    Control_Car_SetDir( &MotorCtrl, &carCtrl );
+    gCarCtrl.Dir = eCAR_DIR_BACK;
+    Control_Car_SetDir( &MotorCtrl, &gCarCtrl );
     vTaskDelay(1000);
 
-    carCtrl.Dir = eRIGHT;
-    Control_Car_SetDir( &MotorCtrl, &carCtrl );
+    gCarCtrl.Dir = eCAR_DIR_RIGHT;
+    Control_Car_SetDir( &MotorCtrl, &gCarCtrl );
     vTaskDelay(1000);
 
-    carCtrl.Dir = eLETH;
-    Control_Car_SetDir( &MotorCtrl, &carCtrl );
+    gCarCtrl.Dir = eCAR_DIR_LEFT;
+    Control_Car_SetDir( &MotorCtrl, &gCarCtrl );
     vTaskDelay(1000);
   }
 }
@@ -177,6 +185,8 @@ static void Control_Test_Direction(void)
 
 static void Control_Init( MotorCtrl_t *Ctrl )
 {
+  int32_t result;
+
   Ctrl->MotorA.GpioP = GPIOB;
   Ctrl->MotorA.GpioPinP = GPIO_PIN_14;
   Ctrl->MotorA.GpioN = GPIOB;
@@ -196,6 +206,20 @@ static void Control_Init( MotorCtrl_t *Ctrl )
 
   __HAL_TIM_SET_COMPARE( Ctrl->MotorB.TimerDrv, Ctrl->MotorB.TimerChannel, 0 );
   HAL_TIM_PWM_Start( Ctrl->MotorB.TimerDrv, Ctrl->MotorB.TimerChannel );
+
+  // ================= Inicializa parametros gravados na flash externa  =================
+  result = Database_Read( PidFileConfig, ( void* ) &gCarCtrl.Pid, sizeof(PidCtrl_t) );
+  if( result != 0 )
+  {
+    result = Database_Write( PidFileConfig, ( void* ) &gCarCtrl.Pid, sizeof(PidCtrl_t) );
+  }
+
+  // ================= Set Button Callback =================
+  Digital_AttachBtn_Callback( Control_ButtonEvent_CB );
+
+  // ================= Configure led =================
+  gLed1.Gpio = GPIOB;
+  gLed1.GpioPin = GPIO_PIN_8;
 }
 
 static void Control_Motor_SetDir( MotorDriver_t *Motor,  MotorDirection_e Dir )
@@ -245,31 +269,31 @@ static void Control_Car_SetDir( MotorCtrl_t *MotorCtrl, CarCtrl_t *CarCtrl )
 
   switch( CarCtrl->Dir )
   {
-    case eSTOP:
+    case eCAR_DIR_STOP:
     {
       dirMotorA = eMOTOR_HALT;
       dirMotorB = eMOTOR_HALT;
       break;
     }
-    case eFRONT:
+    case eCAR_DIR_FRONT:
     {
       dirMotorA = eMOTOR_FORWARD;
       dirMotorB = eMOTOR_FORWARD;
       break;
     }
-    case eBACK:
+    case eCAR_DIR_BACK:
     {
       dirMotorA = eMOTOR_BACKWARD;
       dirMotorB = eMOTOR_BACKWARD;
       break;
     }
-    case eRIGHT:
+    case eCAR_DIR_RIGHT:
     {
       dirMotorA = eMOTOR_HALT;
       dirMotorB = eMOTOR_FORWARD;
       break;
     }
-    case eLETH:
+    case eCAR_DIR_LEFT:
     {
       dirMotorA = eMOTOR_FORWARD;
       dirMotorB = eMOTOR_HALT;
@@ -281,11 +305,11 @@ static void Control_Car_SetDir( MotorCtrl_t *MotorCtrl, CarCtrl_t *CarCtrl )
 
   // Motor A
   Control_Motor_SetDir( &MotorCtrl->MotorA, dirMotorA );
-//  Control_Motor_SetPwm( &MotorCtrl->MotorA, CarCtrl->DutyCyclePercentA );
+  Control_Motor_SetPwm( &MotorCtrl->MotorA, CarCtrl->DutyCyclePercentA );
 
   // Motor B
   Control_Motor_SetDir( &MotorCtrl->MotorB, dirMotorB );
-//  Control_Motor_SetPwm( &MotorCtrl->MotorB, CarCtrl->DutyCyclePercentB );
+  Control_Motor_SetPwm( &MotorCtrl->MotorB, CarCtrl->DutyCyclePercentB );
 }
 
 static void Control_Car_CalcDirection( CarCtrl_t *Car, DigitalValues_t *Digital )
@@ -297,16 +321,45 @@ static void Control_Car_CalcDirection( CarCtrl_t *Car, DigitalValues_t *Digital 
     percent = 0;
   }
 
-  Car->Dir = eFRONT;
+//  Car->Dir = eFRONT;
   Car->DutyCyclePercentA = percent;
   Car->DutyCyclePercentB = percent;
 }
 
 __inline static void Control_Trace(CarCtrl_t *Car, DigitalValues_t *Digital)
 {
-  if( gIsLogEnable )
+  if( gIsTraceEnable )
   {
-    Serial_Message( "S: 0b"_BYTE_TO_BINARY_PATTERN", Dir: %d, M1: %d %%, M2: %d %%\r\n", _BYTE_TO_BINARY(Digital->Values), Car->Dir, Car->DutyCyclePercentA, Car->DutyCyclePercentB );
+    Serial_Message( "S: 0b"_BYTE_TO_BINARY_PATTERN", Dir: %s, M1: %d %%, M2: %d %%\r\n", _BYTE_TO_BINARY(Digital->Values), ControlDirMsg[Car->Dir], Car->DutyCyclePercentA, Car->DutyCyclePercentB );
+  }
+}
+
+static void Control_ButtonEvent_CB( bool IsPressed )
+{
+  static uint8_t state = 0;
+
+  if( IsPressed )
+  {
+    switch( state )
+    {
+      case 0:
+      {
+        Led_Blink( &gLed1, eLED_BLINK_1, 1 );
+        gCarCtrl.Dir = eCAR_DIR_STOP;
+        state = 1;
+        break;
+      }
+      case 1:
+      {
+        Led_Blink( &gLed1, eLED_BLINK_2, 2 );
+        gCarCtrl.Dir = eCAR_DIR_FRONT;
+        state = 0;
+        break;
+      }
+      default:
+        state = 0;
+        break;
+    }
   }
 }
 
@@ -316,36 +369,63 @@ __inline static void Control_Trace(CarCtrl_t *Car, DigitalValues_t *Digital)
 
 void Control_EnableTrace( bool Status )
 {
-  gIsLogEnable = Status;
+  gIsTraceEnable = Status;
 }
 
-void Control_SetParamPID(PidTypeParam_e Type, float Value)
+void Control_SetDirection( CarDirection_e Direction )
+{
+  if( Direction < eCAR_DIR_MAX )
+  {
+    gCarCtrl.Dir = Direction;
+  }
+}
+
+CarDirection_e Control_GetDirection( void )
+{
+  return gCarCtrl.Dir;
+}
+
+const char* Control_GetDirectionString( CarDirection_e Direction )
+{
+  if( Direction < eCAR_DIR_MAX )
+  {
+    return ControlDirMsg[Direction];
+  }
+
+  return NULL;
+}
+
+void Control_SetParamPID( PidTypeParam_e Type, float Value )
 {
   switch( Type )
   {
     case ePID_KP:
     {
-      gPidCtrl.Kp = Value;
+      gCarCtrl.Pid.Kp = Value;
       break;
     }
     case ePID_KI:
     {
-      gPidCtrl.Ki = Value;
+      gCarCtrl.Pid.Ki = Value;
       break;
     }
     case ePID_KD:
     {
-      gPidCtrl.Kd = Value;
+      gCarCtrl.Pid.Kd = Value;
       break;
     }
     case ePID_SetPoint:
     {
-      gPidCtrl.SetPoint = Value;
+      gCarCtrl.Pid.SetPoint = Value;
       break;
     }
     default:
-    break;
+      return;
+      break;
   }
+
+  // Salva parametro
+  Database_Write( PidFileConfig, ( void* ) &gCarCtrl.Pid, sizeof(PidCtrl_t) );
 }
 
 float Control_GetParamPID( PidTypeParam_e Type )
@@ -354,19 +434,19 @@ float Control_GetParamPID( PidTypeParam_e Type )
   {
     case ePID_KP:
     {
-      return gPidCtrl.Kp;
+      return gCarCtrl.Pid.Kp;
     }
     case ePID_KI:
     {
-      return gPidCtrl.Ki;
+      return gCarCtrl.Pid.Ki;
     }
     case ePID_KD:
     {
-      return gPidCtrl.Kd;
+      return gCarCtrl.Pid.Kd;
     }
     case ePID_SetPoint:
     {
-      return gPidCtrl.SetPoint;
+      return gCarCtrl.Pid.SetPoint;
     }
     default:
       return 0;
@@ -375,11 +455,8 @@ float Control_GetParamPID( PidTypeParam_e Type )
 
 void Control_Task(void *Parameters)
 {
-  bool adcUpdated;
-
-  CarCtrl_t carCtrl;
+  bool sensorUpdated;
   MotorCtrl_t MotorCtrl;
-
   DigitalValues_t digitalValues;
 
   // Configura GPIO e PWM dos motores
@@ -389,12 +466,12 @@ void Control_Task(void *Parameters)
   for(;;)
   {
     // procura novos valores do canal AD
-    adcUpdated = Digital_Read( &digitalValues );
-    if( adcUpdated )
+    sensorUpdated = Digital_Read( &digitalValues );
+    if( sensorUpdated )
     {
-      Control_Car_CalcDirection( &carCtrl, &digitalValues );
-      Control_Car_SetDir( &MotorCtrl, &carCtrl );
-      Control_Trace( &carCtrl, &digitalValues );
+      Control_Car_CalcDirection( &gCarCtrl, &digitalValues );
+      Control_Car_SetDir( &MotorCtrl, &gCarCtrl );
+      Control_Trace( &gCarCtrl, &digitalValues );
     }
   }
 }

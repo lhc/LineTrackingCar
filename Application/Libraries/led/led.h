@@ -1,13 +1,13 @@
 /**
- * @file    setup_hw.h
+ * @file    led.h
  * @brief
  */
 
 //==============================================================================
 // Define to prevent recursive inclusion
 //==============================================================================
-#ifndef _SETUP_HW_
-#define	_SETUP_HW_
+#ifndef _LED_H_
+#define	_LED_H_
 
 /* C++ detection */
 #ifdef __cplusplus
@@ -18,36 +18,15 @@ extern "C" {
 // Includes
 //==============================================================================
 
-#include "main.h"
-#include "stm32f411xe.h"
-#include "stm32f4xx_hal.h"
+#include "setup_hw.h"
 
-#include "cmsis_os.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
-#include "stream_buffer.h"
-
-#include <stdint.h>
-#include <stdbool.h>
+//==============================================================================
+// Exported macro
+//==============================================================================
 
 //==============================================================================
 //Exported constants
 //==============================================================================
-
-/* Littlefs Debug */
-#define LFS_NO_DEBUG            /**< Disable messages */
-#define LFS_NO_WARN             /**< Disable warn messages */
-#define LFS_NO_ERROR            /**< Disable error messages */
-#define LFS_NO_ASSERT           /**< Disable asserts of lib */
-//#define LFS_NO_MALLOC         /**< No use malloc and free function */
-//#define LFS_YES_TRACE         /**< Enable messages of trace */
-//#define LFS_NO_INTRINSICS     /**< ?? */
-//#define LFS_READONLY          /**< Configuring library just to use read mode */
-//#define LFS_THREADSAFE        /**< Enable functions to lock and unlock when entry in some routine of read and write */
-
-#define SETUP_FIRMWARE_VERSION   "v1.0"
 
 //==============================================================================
 // Exported macro
@@ -57,6 +36,18 @@ extern "C" {
 // Exported types
 //==============================================================================
 
+typedef enum
+{
+  eLED_BLINK_1 = 0,
+  eLED_BLINK_2,
+} LedBlinkType_e;
+
+typedef struct
+{
+  GPIO_TypeDef *Gpio;
+  uint16_t GpioPin;
+} Led_t;
+
 //==============================================================================
 // Exported variables
 //==============================================================================
@@ -65,7 +56,7 @@ extern "C" {
 // Exported functions prototypes
 //==============================================================================
 
-void Setup_Init( void );
+void Led_Blink( Led_t *Led, LedBlinkType_e Type, uint8_t NumBlink );
 
 //==============================================================================
 // Exported functions
@@ -76,4 +67,4 @@ void Setup_Init( void );
 }
 #endif
 
-#endif /* _SETUP_HW_ */
+#endif /* _LED_H_ */

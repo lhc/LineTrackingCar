@@ -1,5 +1,5 @@
 /**
- * @file    printer.cpp
+ * @file    commands.c
  * @brief
  */
 
@@ -8,6 +8,7 @@
 //==============================================================================
 
 #include "digital.h"
+#include "serial.h"
 #include "Setup/setup_hw.h"
 #include "bitwise/bitwise.h"
 #include "cli/FreeRTOS_CLI.h"
@@ -39,9 +40,10 @@
 //==============================================================================
 
 static BaseType_t CLI_ResetCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
-static BaseType_t CLI_LogCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
+static BaseType_t CLI_TraceCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
 static BaseType_t CLI_PidCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
 static BaseType_t CLI_InfoCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
+static BaseType_t CLI_DirectionCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString );
 
 //==============================================================================
 // Private variables
@@ -55,11 +57,11 @@ static const CLI_Command_Definition_t CliCmd_Reset =
     0 /* none number. */
 };
 
-static const CLI_Command_Definition_t CliCmd_Log =
+static const CLI_Command_Definition_t CliCmd_Trace =
 {
-    "log", /* The command string to type. */
-    "log:\r\n enable trace of car\r\n",
-    CLI_LogCommand, /* The function to run. */
+    "trace", /* The command string to type. */
+    "trace:\r\n enable trace of car\r\n",
+    CLI_TraceCommand, /* The function to run. */
     1 /* number of commands. */
 };
 
@@ -77,6 +79,14 @@ static const CLI_Command_Definition_t CliCmd_GetInfo =
     "info:\r\n Show informations of system\r\n",
     CLI_InfoCommand, /* The function to run. */
     0 /* number of commands. */
+};
+
+static const CLI_Command_Definition_t CliCmd_Direction =
+{
+    "direction", /* The command string to type. */
+    "direction:\r\n Set direction of car\r\n",
+    CLI_DirectionCommand, /* The function to run. */
+    1 /* number of commands. */
 };
 
 //==============================================================================
@@ -98,7 +108,7 @@ static BaseType_t CLI_ResetCommand( char *OutputBuffer, size_t OutputBufferLen, 
   return pdFALSE;
 }
 
-static BaseType_t CLI_LogCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString )
+static BaseType_t CLI_TraceCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString )
 {
   bool enableLog;
   char *parameter;
@@ -108,7 +118,7 @@ static BaseType_t CLI_LogCommand( char *OutputBuffer, size_t OutputBufferLen, co
   ( void ) CommandString;
   ( void ) OutputBufferLen;
 
-  parameter = FreeRTOS_CLIGetParameter( CommandString, 1, &parameterStringLength );
+  parameter = (char *)FreeRTOS_CLIGetParameter( CommandString, 1, &parameterStringLength );
   parameter[ parameterStringLength ] = 0x00;
 
   if( strcmp( parameter, "enable" ) == 0 )
@@ -121,7 +131,7 @@ static BaseType_t CLI_LogCommand( char *OutputBuffer, size_t OutputBufferLen, co
   }
   else
   {
-    snprintf_( OutputBuffer, OutputBufferLen, "Invald parameter\r\n" );
+    snprintf_( OutputBuffer, OutputBufferLen, "Invalid parameter\r\n" );
   }
 
   Control_EnableTrace( enableLog );
@@ -164,7 +174,7 @@ static BaseType_t CLI_PidCommand( char *OutputBuffer, size_t OutputBufferLen, co
   }
   else if( strcmp( parameter1, "ki" ) == 0 )
   {
-    typePidParam = ePID_KP;
+    typePidParam = ePID_KI;
   }
   else if( strcmp( parameter1, "kd" ) == 0 )
   {
@@ -195,7 +205,54 @@ static BaseType_t CLI_InfoCommand( char *OutputBuffer, size_t OutputBufferLen, c
   Serial_Message( "      Ki: %f\r\n", Control_GetParamPID( ePID_KI ) );
   Serial_Message( "      Kd: %f\r\n", Control_GetParamPID( ePID_KD ) );
   Serial_Message( "SetPoint: %f\r\n", Control_GetParamPID( ePID_SetPoint ) );
+  Serial_Message( "     Dir: %s\r\n", Control_GetDirectionString( Control_GetDirection() ) );
 
+  return pdFALSE;
+}
+
+static BaseType_t CLI_DirectionCommand( char *OutputBuffer, size_t OutputBufferLen, const char *CommandString )
+{
+  char *parameter;
+  BaseType_t parameterStringLength;
+  CarDirection_e direction;
+
+  /* Remove compile time warnings about unused parameters */
+  ( void ) CommandString;
+  ( void ) OutputBufferLen;
+
+  parameter = (char *)FreeRTOS_CLIGetParameter( CommandString, 1, &parameterStringLength );
+  parameter[ parameterStringLength ] = 0x00;
+
+  if( strcmp( parameter, "stop" ) == 0 )
+  {
+    direction = eCAR_DIR_STOP;
+  }
+  else if( strcmp( parameter, "front" ) == 0 )
+  {
+    direction = eCAR_DIR_FRONT;
+  }
+  else if( strcmp( parameter, "back" ) == 0 )
+  {
+    direction = eCAR_DIR_BACK;
+  }
+  else if( strcmp( parameter, "right" ) == 0 )
+  {
+    direction = eCAR_DIR_RIGHT;
+  }
+  else if( strcmp( parameter, "left" ) == 0 )
+  {
+    direction = eCAR_DIR_LEFT;
+  }
+  else
+  {
+    snprintf_( OutputBuffer, OutputBufferLen, "Invalid parameter\r\n" );
+    return pdFALSE;
+  }
+
+  Control_SetDirection( direction );
+  snprintf_(OutputBuffer, OutputBufferLen, "New direction set\r\n" , parameter);
+
+  /* There is no more data to return after this single string, so return pdFALSE. */
   return pdFALSE;
 }
 
@@ -206,7 +263,8 @@ static BaseType_t CLI_InfoCommand( char *OutputBuffer, size_t OutputBufferLen, c
 void CLI_RegisterCommands( void )
 {
   FreeRTOS_CLIRegisterCommand ( &CliCmd_Reset );
-  FreeRTOS_CLIRegisterCommand ( &CliCmd_Log );
+  FreeRTOS_CLIRegisterCommand ( &CliCmd_Trace );
   FreeRTOS_CLIRegisterCommand ( &CliCmd_PID );
   FreeRTOS_CLIRegisterCommand ( &CliCmd_GetInfo );
+  FreeRTOS_CLIRegisterCommand ( &CliCmd_Direction );
 }

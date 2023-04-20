@@ -1,5 +1,5 @@
 /**
- * @file    printer.cpp
+ * @file    digital.c
  * @brief
  */
 
@@ -10,6 +10,7 @@
 #include "digital.h"
 #include "Setup/setup_hw.h"
 #include "bitwise/bitwise.h"
+#include "button/button.h"
 
 //==============================================================================
 // Private definitions
@@ -17,7 +18,7 @@
 
 #define DIGITAL_QUEUE_NUM_ITEMS           (2)
 #define DIGITAL_QUEUE_READ_TIMEOUT_MS     (5000)
-#define DIGITAL_QUEUE_WRITE_TIMEOUT_MS    (5000)
+#define DIGITAL_QUEUE_WRITE_TIMEOUT_MS    (300)
 #define DIGITAL_NUM_GPIO                  (8)
 
 //==============================================================================
@@ -30,9 +31,9 @@
 
 typedef struct
 {
-  GPIO_TypeDef * Gpio;
+  GPIO_TypeDef *Gpio;
   uint32_t Pin;
-}DigitaDrv_t;
+} DigitaDrv_t;
 
 //==============================================================================
 // Extern variables
@@ -44,15 +45,16 @@ typedef struct
 
 static void Digital_Error( HAL_StatusTypeDef Err );
 static void Digital_Init( void );
-static void Digital_GPIO_Read( DigitalValues_t *Digital );
+static void Digital_ReadLineSensor( DigitalValues_t *Digital );
 
 //==============================================================================
 // Private variables
 //==============================================================================
 
 static xQueueHandle gQueueDigital;
-static DigitaDrv_t Sensor[DIGITAL_NUM_GPIO] = {0};
-static DigitaDrv_t SensorIR = {0};
+static DigitaDrv_t gLineSensor[DIGITAL_NUM_GPIO] = {0};
+static DigitaDrv_t gLineSensorIR = {0};
+static Button_t gBtn = {0};
 
 //==============================================================================
 // Private functions
@@ -69,32 +71,38 @@ static void Digital_Error( HAL_StatusTypeDef Err )
 
 static void Digital_Init(void)
 {
-  SensorIR.Gpio = GPIOB;
-  SensorIR.Pin = GPIO_PIN_2;
+  gBtn.Drv.Gpio = GPIOB;
+  gBtn.Drv.Pin = GPIO_PIN_9;
+  gBtn.OldStatus = true;
+  gBtn.CurrStatus = true;
+  gBtn.function_cb = NULL;
 
-  Sensor[0].Gpio = GPIOA;
-  Sensor[0].Pin = GPIO_PIN_0;
+  gLineSensorIR.Gpio = GPIOB;
+  gLineSensorIR.Pin = GPIO_PIN_2;
 
-  Sensor[1].Gpio = GPIOA;
-  Sensor[1].Pin = GPIO_PIN_1;
+  gLineSensor[0].Gpio = GPIOB;
+  gLineSensor[0].Pin = GPIO_PIN_6;
 
-  Sensor[2].Gpio = GPIOA;
-  Sensor[2].Pin = GPIO_PIN_2;
+  gLineSensor[1].Gpio = GPIOA;
+  gLineSensor[1].Pin = GPIO_PIN_1;
 
-  Sensor[3].Gpio = GPIOA;
-  Sensor[3].Pin = GPIO_PIN_3;
+  gLineSensor[2].Gpio = GPIOA;
+  gLineSensor[2].Pin = GPIO_PIN_2;
 
-  Sensor[4].Gpio = GPIOA;
-  Sensor[4].Pin = GPIO_PIN_6;
+  gLineSensor[3].Gpio = GPIOA;
+  gLineSensor[3].Pin = GPIO_PIN_3;
 
-  Sensor[5].Gpio = GPIOA;
-  Sensor[5].Pin = GPIO_PIN_7;
+  gLineSensor[4].Gpio = GPIOB;
+  gLineSensor[4].Pin = GPIO_PIN_4;
 
-  Sensor[6].Gpio = GPIOB;
-  Sensor[6].Pin = GPIO_PIN_0;
+  gLineSensor[5].Gpio = GPIOB;
+  gLineSensor[5].Pin = GPIO_PIN_5;
 
-  Sensor[7].Gpio = GPIOB;
-  Sensor[7].Pin = GPIO_PIN_1;
+  gLineSensor[6].Gpio = GPIOB;
+  gLineSensor[6].Pin = GPIO_PIN_0;
+
+  gLineSensor[7].Gpio = GPIOB;
+  gLineSensor[7].Pin = GPIO_PIN_1;
 
   gQueueDigital = xQueueCreate( DIGITAL_QUEUE_NUM_ITEMS, sizeof(uint8_t) );
   if( gQueueDigital == NULL )
@@ -102,17 +110,17 @@ static void Digital_Init(void)
     Digital_Error( HAL_ERROR );
   }
 
-  HAL_GPIO_WritePin( SensorIR.Gpio, SensorIR.Pin, GPIO_PIN_SET );
+  HAL_GPIO_WritePin( gLineSensorIR.Gpio, gLineSensorIR.Pin, GPIO_PIN_SET );
 }
 
-static void Digital_GPIO_Read( DigitalValues_t *Digital )
+static void Digital_ReadLineSensor( DigitalValues_t *Digital )
 {
   uint8_t value;
   GPIO_PinState gpio_state;
 
   for( uint8_t index = 0; index < DIGITAL_NUM_GPIO; index++ )
   {
-    gpio_state = HAL_GPIO_ReadPin( Sensor[ index ].Gpio, Sensor[ index ].Pin );
+    gpio_state = HAL_GPIO_ReadPin( gLineSensor[ index ].Gpio, gLineSensor[ index ].Pin );
     _BIT_WR_BOL( value, index, gpio_state );
   }
 
@@ -133,6 +141,11 @@ bool Digital_Read( DigitalValues_t *Digital )
   return false;
 }
 
+void Digital_AttachBtn_Callback(void (*function_cb)(bool status))
+{
+  gBtn.function_cb = function_cb;
+}
+
 void Digital_Task( void *Parameters )
 {
   DigitalValues_t digital;
@@ -142,8 +155,10 @@ void Digital_Task( void *Parameters )
   /* Infinite loop */
   for( ;; )
   {
-    Digital_GPIO_Read(&digital);
-    vTaskDelay(10);
+    Digital_ReadLineSensor( &digital );
+    Button_Read( &gBtn );
+    vTaskDelay( 10 );
+
     // Adiciona valor calculado a queue, q agora pode ser consumida pela task control
     xQueueSend( gQueueDigital, &digital, DIGITAL_QUEUE_WRITE_TIMEOUT_MS );
   }

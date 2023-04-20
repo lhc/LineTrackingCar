@@ -50,7 +50,7 @@ typedef struct
 
 bool Digital_Read( DigitalValues_t *Analog );
 void Digital_Task(void *Parameters);
-
+void Digital_AttachBtn_Callback(void (*function_cb)(bool status));
 //==============================================================================
 // Exported functions
 //==============================================================================

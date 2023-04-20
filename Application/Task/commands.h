@@ -1,11 +1,12 @@
 /**
- * @file    digital.h
+ * @file    commands.h
  * @brief
  */
 
 //==============================================================================
 // Define to prevent recursive inclusion
 //==============================================================================
+
 #ifndef _COMMANDS_H
 #define _COMMANDS_H
 
@@ -52,4 +53,4 @@ void CLI_RegisterCommands( void );
 }
 #endif
 
-#endif  /* _TASK_DIGITAL_H */
+#endif  /* _COMMANDS_H */

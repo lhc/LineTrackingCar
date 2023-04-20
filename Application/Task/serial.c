@@ -1,5 +1,5 @@
 /**
- * @file    printer.cpp
+ * @file    serial.c
  * @brief
  */
 
@@ -19,16 +19,16 @@
 // Private definitions
 //==============================================================================
 
-#define SERIAL_BUFFER_SIZE                (1024)
-#define SERIAL_TRIGGER_LEVEL              (10)
-#define SERIAL_MUTEX_TIMEOUT_MS           (1000)
-#define SERIAL_TX_WAIT_TIMEOUT_MS         (5000)
+#define SERIAL_BUFFER_SIZE                     (1024)
+#define SERIAL_TRIGGER_LEVEL                   (10)
+#define SERIAL_MUTEX_TIMEOUT_MS                (1000)
+#define SERIAL_TX_WAIT_TIMEOUT_MS              (5000)
 
-#define SERIAL_RX_CONSOLE_CIRCULAR_BUFFER_SIZE 512
-#define SERIAL_TX_CONSOLE_CIRCULAR_BUFFER_SIZE 2048
+#define SERIAL_RX_CONSOLE_CIRCULAR_BUFFER_SIZE (512)
+#define SERIAL_TX_CONSOLE_CIRCULAR_BUFFER_SIZE (512)
 
-#define SERIAL_CHAR_ASCII_RETURN ( 0x0D )
-#define SERIAL_CHAR_ASCII_DEL    ( '\b' )
+#define SERIAL_CHAR_ASCII_RETURN               ( 0x0D )
+#define SERIAL_CHAR_ASCII_DEL                  ( '\b' )
 
 //==============================================================================
 // Private macro
@@ -43,11 +43,10 @@ static SemaphoreHandle_t gSemaphoreTx = NULL;
 static StreamBufferHandle_t xStreamBuffer = NULL;
 static uint8_t gSerialBuffer[ SERIAL_BUFFER_SIZE ];
 
-static UART_HandleTypeDef *drvUart;
-static QueueHandle_t gQueueRxConsole = NULL;
-static uint8_t gRxConsoleData;
-static uint8_t gRx_ConsoleBuffer[SERIAL_RX_CONSOLE_CIRCULAR_BUFFER_SIZE];
-static uint8_t gConsole_OutputBuffer[SERIAL_TX_CONSOLE_CIRCULAR_BUFFER_SIZE];
+static QueueHandle_t gQueueRxCli = NULL;
+static uint8_t gRxCliData;
+static uint8_t gCliBuffer[SERIAL_RX_CONSOLE_CIRCULAR_BUFFER_SIZE];
+static uint8_t gCliOutputBuffer[SERIAL_TX_CONSOLE_CIRCULAR_BUFFER_SIZE];
 
 //==============================================================================
 // Extern variables
@@ -176,11 +175,11 @@ static void Serial_ISR_Rx( void )
 {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-  if( gQueueRxConsole != NULL )
+  if( gQueueRxCli != NULL )
   {
-    xQueueSendFromISR( gQueueRxConsole, &gRxConsoleData, &xHigherPriorityTaskWoken );
+    xQueueSendFromISR( gQueueRxCli, &gRxCliData, &xHigherPriorityTaskWoken );
 
-    HAL_UART_Receive_IT( drvUart, ( uint8_t* ) &gRxConsoleData, 1 );
+    HAL_UART_Receive_IT( &huart1, ( uint8_t* ) &gRxCliData, 1 );
 
     portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
   }
@@ -188,10 +187,8 @@ static void Serial_ISR_Rx( void )
 
 static void Serial_CLI_Init( void )
 {
-  drvUart = &huart1;
-
-  gQueueRxConsole = xQueueCreate( 30, sizeof(uint8_t) );
-  if( gQueueRxConsole == NULL )
+  gQueueRxCli = xQueueCreate( 30, sizeof(uint8_t) );
+  if( gQueueRxCli == NULL )
   {
     Serial_Error( HAL_ERROR );
   }
@@ -272,27 +269,27 @@ void Serial_CLI_Task (void * argument)
   bool isReady = false;
 
   // Initialize buffers
-  memset ( (char*)gRx_ConsoleBuffer, 0x00, sizeof ( gRx_ConsoleBuffer ) );
-  memset ( (char*)gConsole_OutputBuffer, 0x00, sizeof ( gConsole_OutputBuffer ) );
+  memset ( (char*)gCliBuffer, 0x00, sizeof ( gCliBuffer ) );
+  memset ( (char*)gCliOutputBuffer, 0x00, sizeof ( gCliOutputBuffer ) );
 
   Serial_CLI_Init();
 
   // Start RX Interrupt on usart7, for first reception
-  HAL_UART_Receive_IT ( drvUart, (uint8_t *) &gRxConsoleData, 1 );
+  HAL_UART_Receive_IT ( &huart1, (uint8_t *) &gRxCliData, 1 );
 
-  Serial_Message ( "\r\n==== LINE TRACKING CAR v%d.%d====\r\n", 1, 0 );
+  Serial_Message ( "\r\n==== LINE TRACKING CAR %s ====\r\n", SETUP_FIRMWARE_VERSION );
 
   for ( ;; )
   {
-    if ( xQueueReceive( gQueueRxConsole, &data, portMAX_DELAY ) )
+    if ( xQueueReceive( gQueueRxCli, &data, portMAX_DELAY ) )
     {
-      isReady = Serial_CLI_MountCommand(gRx_ConsoleBuffer, sizeof(gRx_ConsoleBuffer), &size_cmd, data);
+      isReady = Serial_CLI_MountCommand(gCliBuffer, sizeof(gCliBuffer), &size_cmd, data);
       if( isReady )
       {
-        Serial_CLI_ParseCommand(gRx_ConsoleBuffer, size_cmd, gConsole_OutputBuffer, sizeof(gConsole_OutputBuffer));
+        Serial_CLI_ParseCommand(gCliBuffer, size_cmd, gCliOutputBuffer, sizeof(gCliOutputBuffer));
 
         /*  Clear the input string ready to receive the next command. */
-        memset( gRx_ConsoleBuffer, 0x00, size_cmd );
+        memset( gCliBuffer, 0x00, size_cmd );
         size_cmd = 0;
       }
      }

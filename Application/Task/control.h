@@ -34,6 +34,16 @@ extern "C" {
 // Exported types
 //==============================================================================
 
+typedef enum
+{
+  eCAR_DIR_STOP = 0,
+  eCAR_DIR_FRONT,
+  eCAR_DIR_BACK,
+  eCAR_DIR_RIGHT,
+  eCAR_DIR_LEFT,
+  eCAR_DIR_MAX,
+} CarDirection_e;
+
 //==============================================================================
 // Exported variables
 //==============================================================================
@@ -43,6 +53,9 @@ extern "C" {
 //==============================================================================
 
 void Control_EnableTrace( bool Status );
+void Control_SetDirection( CarDirection_e Direction );
+CarDirection_e Control_GetDirection( void );
+const char* Control_GetDirectionString( CarDirection_e Direction );
 void Control_SetParamPID( PidTypeParam_e Type, float Value );
 float Control_GetParamPID( PidTypeParam_e Type );
 void Control_Task(void *Parameters);

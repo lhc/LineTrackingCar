@@ -1,13 +1,14 @@
 /**
- * @file    setup_hw.h
- * @brief
- */
+* @file    w25qxx_littlefs.h
+* @brief   Library to use littlefs with w25qxx memory
+*/
 
 //==============================================================================
 // Define to prevent recursive inclusion
 //==============================================================================
-#ifndef _SETUP_HW_
-#define	_SETUP_HW_
+
+#ifndef _W25QXX_LITTLEFS_H
+#define _W25QXX_LITTLEFS_H
 
 /* C++ detection */
 #ifdef __cplusplus
@@ -18,36 +19,14 @@ extern "C" {
 // Includes
 //==============================================================================
 
-#include "main.h"
-#include "stm32f411xe.h"
-#include "stm32f4xx_hal.h"
-
-#include "cmsis_os.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
-#include "stream_buffer.h"
-
-#include <stdint.h>
-#include <stdbool.h>
+#include "setup_hw.h"
+#include "../lfs.h"
+#include "lfs_file.h"
+#include "w25qxx.h"
 
 //==============================================================================
 //Exported constants
 //==============================================================================
-
-/* Littlefs Debug */
-#define LFS_NO_DEBUG            /**< Disable messages */
-#define LFS_NO_WARN             /**< Disable warn messages */
-#define LFS_NO_ERROR            /**< Disable error messages */
-#define LFS_NO_ASSERT           /**< Disable asserts of lib */
-//#define LFS_NO_MALLOC         /**< No use malloc and free function */
-//#define LFS_YES_TRACE         /**< Enable messages of trace */
-//#define LFS_NO_INTRINSICS     /**< ?? */
-//#define LFS_READONLY          /**< Configuring library just to use read mode */
-//#define LFS_THREADSAFE        /**< Enable functions to lock and unlock when entry in some routine of read and write */
-
-#define SETUP_FIRMWARE_VERSION   "v1.0"
 
 //==============================================================================
 // Exported macro
@@ -65,15 +44,14 @@ extern "C" {
 // Exported functions prototypes
 //==============================================================================
 
-void Setup_Init( void );
+int W25QXX_LittleFs_Init( LfsHandler_t *pLfsHandler, W25QXX_Handler_t *pDevice );
 
 //==============================================================================
 // Exported functions
 //==============================================================================
 
-/* C++ detection */
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* _SETUP_HW_ */
+#endif /* _W25QXX_LITTLEFS_H */
