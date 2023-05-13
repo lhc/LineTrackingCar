@@ -35,9 +35,17 @@ typedef struct
   uint32_t Pin;
 } DigitaDrv_t;
 
+typedef struct
+{
+  TIM_HandleTypeDef *TimerDrv;
+  uint32_t TimerChannel;
+} PwmDriver_t;
+
 //==============================================================================
 // Extern variables
 //==============================================================================
+
+extern TIM_HandleTypeDef htim4; // Pino DIR do sensor de distancia 250 Hz
 
 //==============================================================================
 // Private function prototypes
@@ -53,7 +61,7 @@ static void Digital_ReadLineSensor( DigitalValues_t *Digital );
 
 static xQueueHandle gQueueDigital;
 static DigitaDrv_t gLineSensor[DIGITAL_NUM_GPIO] = {0};
-static DigitaDrv_t gLineSensorIR = {0};
+static PwmDriver_t gLineSensorIR = {0};
 static Button_t gBtn = {0};
 
 //==============================================================================
@@ -69,6 +77,21 @@ static void Digital_Error( HAL_StatusTypeDef Err )
   }
 }
 
+/**
+ * @brief percent:  range: 0 to 100
+ */
+static void Digital_Motor_SetPwm( PwmDriver_t *Motor, uint8_t Percent )
+{
+  uint32_t compareValue;
+
+  if( Percent <= 100 )
+  {
+    // Converte a porcentagem do duty cycle em um valor de contagem para o PWM.
+    compareValue = ( ( uint32_t ) Percent * __HAL_TIM_GET_AUTORELOAD( Motor->TimerDrv ) ) / 100;
+    __HAL_TIM_SET_COMPARE( Motor->TimerDrv, Motor->TimerChannel, compareValue );
+  }
+}
+
 static void Digital_Init(void)
 {
   gBtn.Drv.Gpio = GPIOB;
@@ -77,8 +100,8 @@ static void Digital_Init(void)
   gBtn.CurrStatus = true;
   gBtn.function_cb = NULL;
 
-  gLineSensorIR.Gpio = GPIOB;
-  gLineSensorIR.Pin = GPIO_PIN_2;
+  gLineSensorIR.TimerDrv = &htim4;
+  gLineSensorIR.TimerChannel = TIM_CHANNEL_2;
 
   gLineSensor[0].Gpio = GPIOB;
   gLineSensor[0].Pin = GPIO_PIN_6;
@@ -110,7 +133,8 @@ static void Digital_Init(void)
     Digital_Error( HAL_ERROR );
   }
 
-  HAL_GPIO_WritePin( gLineSensorIR.Gpio, gLineSensorIR.Pin, GPIO_PIN_SET );
+  HAL_TIM_PWM_Start( gLineSensorIR.TimerDrv, gLineSensorIR.TimerChannel );
+  Digital_Motor_SetPwm( &gLineSensorIR, 50);
 }
 
 static void Digital_ReadLineSensor( DigitalValues_t *Digital )

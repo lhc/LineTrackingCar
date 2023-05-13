@@ -46,6 +46,12 @@ const char *ControlDirMsg[] =
 
 typedef struct
 {
+  TIM_HandleTypeDef *TimerDrv;
+  uint32_t TimerChannel;
+} PwmDriver_t;
+
+typedef struct
+{
   /* Gpio Driver control */
   GPIO_TypeDef *GpioP;
   uint16_t GpioPinP;
@@ -53,8 +59,7 @@ typedef struct
   uint16_t GpioPinN;
 
   /** Pwm driver control */
-  TIM_HandleTypeDef *TimerDrv;
-  uint32_t TimerChannel;
+  PwmDriver_t PwmDrv;
   uint32_t CompareValue;
 } MotorDriver_t;
 
@@ -78,6 +83,7 @@ typedef struct
 
 extern TIM_HandleTypeDef htim1; // Pwm configurado para 1Khz
 extern TIM_HandleTypeDef htim2; // Pwm configurado para 1Khz
+extern TIM_HandleTypeDef htim4; // Pino DIR do sensor de distancia 250 Hz
 
 //==============================================================================
 // Private function prototypes
@@ -191,21 +197,21 @@ static void Control_Init( MotorCtrl_t *Ctrl )
   Ctrl->MotorA.GpioPinP = GPIO_PIN_14;
   Ctrl->MotorA.GpioN = GPIOB;
   Ctrl->MotorA.GpioPinN = GPIO_PIN_15;
-  Ctrl->MotorA.TimerDrv = &htim1;
-  Ctrl->MotorA.TimerChannel = TIM_CHANNEL_1;
+  Ctrl->MotorA.PwmDrv.TimerDrv = &htim1;
+  Ctrl->MotorA.PwmDrv.TimerChannel = TIM_CHANNEL_1;
 
   Ctrl->MotorB.GpioP = GPIOB;
   Ctrl->MotorB.GpioPinP = GPIO_PIN_12;
   Ctrl->MotorB.GpioN = GPIOB;
   Ctrl->MotorB.GpioPinN = GPIO_PIN_13;
-  Ctrl->MotorB.TimerDrv = &htim2;
-  Ctrl->MotorB.TimerChannel = TIM_CHANNEL_1;
+  Ctrl->MotorB.PwmDrv.TimerDrv = &htim2;
+  Ctrl->MotorB.PwmDrv.TimerChannel = TIM_CHANNEL_1;
 
-  __HAL_TIM_SET_COMPARE( Ctrl->MotorA.TimerDrv, Ctrl->MotorA.TimerChannel, 0 );
-  HAL_TIM_PWM_Start( Ctrl->MotorA.TimerDrv, Ctrl->MotorA.TimerChannel );
+  __HAL_TIM_SET_COMPARE( Ctrl->MotorA.PwmDrv.TimerDrv, Ctrl->MotorA.PwmDrv.TimerChannel, 0 );
+  HAL_TIM_PWM_Start( Ctrl->MotorA.PwmDrv.TimerDrv, Ctrl->MotorA.PwmDrv.TimerChannel );
 
-  __HAL_TIM_SET_COMPARE( Ctrl->MotorB.TimerDrv, Ctrl->MotorB.TimerChannel, 0 );
-  HAL_TIM_PWM_Start( Ctrl->MotorB.TimerDrv, Ctrl->MotorB.TimerChannel );
+  __HAL_TIM_SET_COMPARE( Ctrl->MotorB.PwmDrv.TimerDrv, Ctrl->MotorB.PwmDrv.TimerChannel, 0 );
+  HAL_TIM_PWM_Start( Ctrl->MotorB.PwmDrv.TimerDrv, Ctrl->MotorB.PwmDrv.TimerChannel );
 
   // ================= Inicializa parametros gravados na flash externa  =================
   result = Database_Read( PidFileConfig, ( void* ) &gCarCtrl.Pid, sizeof(PidCtrl_t) );
@@ -257,8 +263,8 @@ static void Control_Motor_SetPwm( MotorDriver_t *Motor, uint8_t Percent )
   if( Percent <= 100 )
   {
     // Converte a porcentagem do duty cycle em um valor de contagem para o PWM.
-    Motor->CompareValue = ( ( uint32_t ) Percent * __HAL_TIM_GET_AUTORELOAD( Motor->TimerDrv ) ) / 100;
-    __HAL_TIM_SET_COMPARE( Motor->TimerDrv, Motor->TimerChannel, Motor->CompareValue );
+    Motor->CompareValue = ( ( uint32_t ) Percent * __HAL_TIM_GET_AUTORELOAD( Motor->PwmDrv.TimerDrv ) ) / 100;
+    __HAL_TIM_SET_COMPARE( Motor->PwmDrv.TimerDrv, Motor->PwmDrv.TimerChannel, Motor->CompareValue );
   }
 }
 
@@ -321,7 +327,6 @@ static void Control_Car_CalcDirection( CarCtrl_t *Car, DigitalValues_t *Digital 
     percent = 0;
   }
 
-//  Car->Dir = eFRONT;
   Car->DutyCyclePercentA = percent;
   Car->DutyCyclePercentB = percent;
 }
